@@ -1,0 +1,14 @@
+node_modules
+dist
+uploads
+.env
+*.log
+.DS_Store
+chrome_profile/
+chrome_debug_profile/
+scraped-media/
+
+generated/
+
+
+src/generated/

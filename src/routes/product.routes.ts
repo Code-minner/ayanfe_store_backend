@@ -1,0 +1,188 @@
+﻿import { Router } from "express";
+import { z } from "zod";
+import { prisma, withId, withIds } from "../db.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { AppError } from "../utils/AppError.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { uploadProductImage } from "../middleware/upload.js";
+import { uploadProductImageBuffer } from "../services/cloudinary.js";
+
+const router = Router();
+
+const productSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  description: z.string().optional(),
+  image: z.string().min(1),
+  images: z.array(z.string()).optional(),
+  price: z.number().nonnegative(),
+  originalPrice: z.number().optional().nullable(),
+  discountPercent: z.number().optional().nullable(),
+  categorySlug: z.string().min(1),
+  category: z.string().optional().nullable(),
+  colors: z.array(z.string()).optional(),
+  badge: z.string().optional().nullable(),
+  subtitle: z.string().optional().nullable(),
+  stock: z.number().int().nonnegative().optional(),
+  isFeatured: z.boolean().optional(),
+  isNewArrival: z.boolean().optional(),
+  active: z.boolean().optional(),
+});
+
+const listSelect = {
+  id: true,
+  slug: true,
+  name: true,
+  image: true,
+  price: true,
+  originalPrice: true,
+  discountPercent: true,
+  categorySlug: true,
+  category: true,
+  colors: true,
+  badge: true,
+  subtitle: true,
+  stock: true,
+  isFeatured: true,
+  isNewArrival: true,
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const adminAll = req.query.admin === "true";
+    const lean = req.query.lean !== "false";
+    const where: {
+      active?: boolean;
+      categorySlug?: string;
+      isFeatured?: boolean;
+      isNewArrival?: boolean;
+      OR?: Array<Record<string, unknown>>;
+    } = adminAll ? {} : { active: true };
+
+    if (typeof req.query.category === "string") where.categorySlug = req.query.category;
+    if (req.query.featured === "true") where.isFeatured = true;
+    if (req.query.new === "true") where.isNewArrival = true;
+
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (q) {
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { slug: { contains: q, mode: "insensitive" } },
+        { categorySlug: { contains: q, mode: "insensitive" } },
+        { category: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    const page = Math.max(1, Number(req.query.page ?? 1) || 1);
+    const defaultLimit = adminAll ? 20 : 24;
+    const limit = Math.min(Number(req.query.limit ?? defaultLimit) || defaultLimit, 100);
+    const skip = (page - 1) * limit;
+
+    const [total, products] = await Promise.all([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        ...(lean ? { select: listSelect } : {}),
+      }),
+    ]);
+
+    if (!adminAll) {
+      res.setHeader("Cache-Control", "public, s-maxage=30, stale-while-revalidate=120");
+    } else {
+      res.setHeader("Cache-Control", "no-store");
+    }
+
+    res.json({
+      products: withIds(products),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  })
+);
+
+router.get(
+  "/:idOrSlug",
+  asyncHandler(async (req, res) => {
+    const key = String(req.params.idOrSlug ?? "");
+    const includeInactive = req.query.admin === "true";
+    let product = await prisma.product.findUnique({ where: { slug: key } });
+    if (!product) {
+      product = await prisma.product.findUnique({ where: { id: key } });
+    }
+    if (!product) throw new AppError(404, "Product not found");
+    if (!product.active && !includeInactive) throw new AppError(404, "Product not found");
+
+    if (!includeInactive) {
+      res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+    } else {
+      res.setHeader("Cache-Control", "no-store");
+    }
+
+    res.json({ product: withId(product) });
+  })
+);
+
+router.post(
+  "/",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const body = productSchema.parse(req.body);
+    const existing = await prisma.product.findUnique({ where: { slug: body.slug } });
+    if (existing) throw new AppError(409, "A product with this slug already exists");
+    const product = await prisma.product.create({
+      data: {
+        ...body,
+        images: body.images?.length ? body.images : [body.image],
+        category: body.category ?? body.categorySlug,
+      },
+    });
+    res.status(201).json({ product: withId(product) });
+  })
+);
+
+router.post(
+  "/upload-image",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    await new Promise<void>((resolve, reject) => {
+      uploadProductImage(req, res, (err) => (err ? reject(err) : resolve()));
+    });
+    if (!req.file) throw new AppError(400, "Please upload an image");
+    const uploaded = await uploadProductImageBuffer(
+      req.file.buffer,
+      `admin-${Date.now()}-${req.file.originalname.replace(/\.[^.]+$/, "")}`
+    );
+    res.status(201).json({ url: uploaded.url, publicId: uploaded.publicId });
+  })
+);
+
+router.put(
+  "/:id",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const body = productSchema.partial().parse(req.body);
+    try {
+      const product = await prisma.product.update({
+        where: { id: String(req.params.id) },
+        data: body,
+      });
+      res.json({ product: withId(product) });
+    } catch {
+      throw new AppError(404, "Product not found");
+    }
+  })
+);
+
+export default router;

@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  customer
+  admin
+}
+
+enum PaymentMethod {
+  paystack
+  bank_transfer
+}
+
+enum OrderStatus {
+  pending
+  pending_verification
+  on_hold
+  paid
+  processing
+  shipped
+  failed
+  cancelled
+}
+
+model User {
+  id           String         @id @default(cuid())
+  name         String
+  firstName    String         @default("")
+  lastName     String         @default("")
+  email        String         @unique
+  phone        String         @default("")
+  avatarUrl    String?
+  passwordHash String
+  role         Role           @default(customer)
+  active       Boolean        @default(true)
+  orders       Order[]
+  wishlist     WishlistItem[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  heroImage   String
+  icon        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Product {
+  id              String         @id @default(cuid())
+  name            String
+  slug            String         @unique
+  description     String         @default("")
+  image           String
+  images          String[]       @default([])
+  price           Float
+  originalPrice   Float?
+  discountPercent Float?
+  categorySlug    String
+  category        String?
+  colors          String[]       @default([])
+  badge           String?
+  subtitle        String?
+  stock           Int            @default(100)
+  isFeatured      Boolean        @default(false)
+  isNewArrival    Boolean        @default(false)
+  active          Boolean        @default(true)
+  wishlist        WishlistItem[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([categorySlug])
+  @@index([active, createdAt])
+  @@index([active, categorySlug, createdAt])
+  @@index([active, isFeatured, createdAt])
+  @@index([active, isNewArrival, createdAt])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+model Order {
+  id                String        @id @default(cuid())
+  userId            String?
+  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email             String
+  items             Json
+  subtotal          Float
+  fee               Float         @default(0)
+  total             Float
+  paymentMethod     PaymentMethod
+  status            OrderStatus   @default(pending)
+  paystackReference String?
+  receiptUrl        String?
+  customerNote      String?
+  shipping          Json?
+  invoiceNumber     String?
+  waybillNumber     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([invoiceNumber])
+  @@index([waybillNumber])
+  @@index([status])
+}
+
+model Settings {
+  id                  String   @id @default(cuid())
+  key                 String   @unique @default("store")
+  paystackEnabled     Boolean  @default(true)
+  bankTransferEnabled Boolean  @default(true)
+  adminNotifyEmail    String   @default("")
+  storeName           String   @default("Ayanfe Store")
+  storeAddress        String   @default("")
+  storePhone          String   @default("")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model EmailOtp {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  purpose   String   @default("signup")
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+}
