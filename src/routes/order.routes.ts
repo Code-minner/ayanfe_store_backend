@@ -38,13 +38,47 @@ router.get(
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    if (ids.length === 0) throw new AppError(400, "Select at least one order (ids)");
+
+    const fromRaw = typeof req.query.from === "string" ? req.query.from : "";
+    const toRaw = typeof req.query.to === "string" ? req.query.to : "";
+    const from = fromRaw ? new Date(fromRaw) : null;
+    const to = toRaw ? new Date(toRaw) : null;
+    if (fromRaw && (!from || Number.isNaN(from.getTime()))) {
+      throw new AppError(400, "Invalid from date");
+    }
+    if (toRaw && (!to || Number.isNaN(to.getTime()))) {
+      throw new AppError(400, "Invalid to date");
+    }
+    if (to) to.setHours(23, 59, 59, 999);
+
+    if (!ids.length && !from && !to) {
+      throw new AppError(400, "Select order ids or a date range (from / to)");
+    }
+
+    const where: Prisma.OrderWhereInput = {};
+    if (ids.length) {
+      where.id = { in: ids };
+    } else {
+      if (from || to) {
+        where.createdAt = {
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lte: to } : {}),
+        };
+      }
+      if (type === "waybill") {
+        where.OR = [
+          { shipping: { path: ["method"], equals: "waybill" } },
+          { waybillNumber: { not: null } },
+        ];
+      }
+    }
 
     const orders = await prisma.order.findMany({
-      where: { id: { in: ids } },
-      orderBy: { createdAt: "desc" },
+      where,
+      orderBy: { createdAt: "asc" },
+      take: 500,
     });
-    if (orders.length === 0) throw new AppError(404, "No orders found");
+    if (orders.length === 0) throw new AppError(404, "No orders found for print");
 
     const updated = [];
     for (const order of orders) {
@@ -139,7 +173,7 @@ router.patch(
   asyncHandler(async (req, res) => {
     const shipping = z
       .object({
-        method: z.enum(["local_pickup", "waybill", "stockpile"]).optional(),
+        method: z.enum(["local_pickup", "waybill", "stockpile", "lagos_delivery"]).optional(),
         fullName: z.string().optional(),
         firstName: z.string().optional(),
         lastName: z.string().optional(),

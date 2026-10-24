@@ -7,6 +7,7 @@ export const ORDER_STATUSES = [
   "paid",
   "processing",
   "shipped",
+  "completed",
   "failed",
   "cancelled",
 ] as const satisfies readonly OrderStatus[];
@@ -19,10 +20,12 @@ export type OrderItem = {
   price: number;
   quantity: number;
   color?: string;
+  size?: string;
+  brand?: string;
 };
 
 export type ShippingInfo = {
-  method?: "local_pickup" | "waybill" | "stockpile" | string;
+  method?: "local_pickup" | "waybill" | "stockpile" | "lagos_delivery" | string;
   fullName?: string;
   firstName?: string;
   lastName?: string;
