@@ -34,6 +34,10 @@ router.get(
   requireStaff,
   asyncHandler(async (req, res) => {
     const type = z.enum(["invoice", "waybill"]).parse(req.query.type ?? "invoice");
+    const methodFilter = z
+      .enum(["local_pickup", "waybill", "stockpile", "lagos_delivery", "all"])
+      .optional()
+      .parse(typeof req.query.method === "string" ? req.query.method : "all");
     const ids = String(req.query.ids ?? "")
       .split(",")
       .map((s) => s.trim())
@@ -65,11 +69,23 @@ router.get(
           ...(to ? { lte: to } : {}),
         };
       }
-      if (type === "waybill") {
+    }
+
+    // Filter by fulfillment so staff can print only local pickup, waybill, etc.
+    const effectiveMethod =
+      methodFilter && methodFilter !== "all"
+        ? methodFilter
+        : type === "waybill"
+          ? "waybill"
+          : null;
+    if (effectiveMethod) {
+      if (effectiveMethod === "waybill") {
         where.OR = [
           { shipping: { path: ["method"], equals: "waybill" } },
           { waybillNumber: { not: null } },
         ];
+      } else {
+        where.shipping = { path: ["method"], equals: effectiveMethod };
       }
     }
 
