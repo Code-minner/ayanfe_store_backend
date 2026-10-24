@@ -1,6 +1,10 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./db.js";
 
+/**
+ * Safe bootstrap only. Does NOT delete products, orders, or users.
+ * For catalog restore use: npx tsx src/import-scraped-products.ts
+ */
 const categories = [
   {
     slug: "ladies",
@@ -68,55 +72,59 @@ const categories = [
 ];
 
 async function seed() {
-  await prisma.product.deleteMany();
-  await prisma.category.deleteMany();
-  await prisma.settings.deleteMany();
+  for (const cat of categories) {
+    await prisma.category.upsert({
+      where: { slug: cat.slug },
+      create: cat,
+      update: {
+        name: cat.name,
+        description: cat.description,
+        heroImage: cat.heroImage,
+        icon: cat.icon,
+      },
+    });
+  }
 
-  await prisma.category.createMany({ data: categories });
-
-  const products = categories.flatMap((cat) =>
-    Array.from({ length: 4 }, (_, i) => ({
-      name: "Wally sport Mesh",
-      slug: `${cat.slug}-wally-${i + 1}`,
-      description: cat.description,
-      image: "/assets/ProductImage.png",
-      price: 290000,
-      categorySlug: cat.slug,
-      category: cat.name,
-      colors: ["#000000", "#555555"],
-      stock: 50,
-      isFeatured: i < 2,
-      isNewArrival: i === 0,
-      active: true,
-    }))
-  );
-
-  await prisma.product.createMany({ data: products });
-
-  await prisma.settings.create({
-    data: {
-      key: "store",
-      paystackEnabled: Boolean(process.env.PAYSTACK_SECRET_KEY),
-      storeName: "Ayanfe Stores",
-      adminNotifyEmail: process.env.ADMIN_EMAIL ?? "ayanfewholesaledev@gmail.com",
-    },
-  });
+  const existingSettings = await prisma.settings.findUnique({ where: { key: "store" } });
+  if (!existingSettings) {
+    await prisma.settings.create({
+      data: {
+        key: "store",
+        paystackEnabled: Boolean(process.env.PAYSTACK_SECRET_KEY),
+        storeName: "Ayanfe Stores",
+        adminNotifyEmail: process.env.ADMIN_EMAIL ?? "ayanfewholesaledev@gmail.com",
+      },
+    });
+  }
 
   const adminEmail = "admin@ayanfestore.com";
   const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {
     await prisma.user.create({
       data: {
-        name: "Ayanfe Admin",
+        name: "Ayanfe Super Admin",
         email: adminEmail,
         passwordHash: await bcrypt.hash("admin1234", 10),
-        role: "admin",
+        role: "super_admin",
       },
     });
+    console.log("Created super admin: admin@ayanfestore.com / admin1234");
+  } else if (existingAdmin.role !== "super_admin") {
+    await prisma.user.update({
+      where: { id: existingAdmin.id },
+      data: { role: "super_admin" },
+    });
+    console.log("Promoted existing admin to super_admin");
+  } else {
+    console.log("Super admin already present");
   }
 
-  console.log("Seed complete");
-  console.log("Admin login: admin@ayanfestore.com / admin1234");
+  const productCount = await prisma.product.count();
+  console.log(`Seed complete (safe). Products in DB: ${productCount}`);
+  if (productCount === 0) {
+    console.log("No products found. Restore with: npx tsx src/import-scraped-products.ts");
+  }
+
   await prisma.$disconnect();
 }
 
@@ -125,4 +133,3 @@ seed().catch(async (err) => {
   await prisma.$disconnect();
   process.exit(1);
 });
-

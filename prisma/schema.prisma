@@ -9,7 +9,9 @@ datasource db {
 
 enum Role {
   customer
+  support
   admin
+  super_admin
 }
 
 enum PaymentMethod {
@@ -69,6 +71,8 @@ model Product {
   categorySlug    String
   category        String?
   colors          String[]       @default([])
+  /** Pack / size options: [{ id, label, price, stock }] e.g. 1 piece, 5 pieces, 100 pieces */
+  variants        Json           @default("[]")
   badge           String?
   subtitle        String?
   stock           Int            @default(100)

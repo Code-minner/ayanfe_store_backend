@@ -8,6 +8,7 @@ import { optionalAuth } from "../middleware/auth.js";
 import { sendOrderStatusEmail } from "../services/mail.js";
 import { makeDocNumber } from "../services/documents.js";
 import { toOrderView } from "../types/order.js";
+import { decrementStockForPaidOrder } from "../services/inventory.js";
 
 const router = Router();
 
@@ -109,17 +110,23 @@ router.get(
     if (!order) throw new AppError(404, "Order not found for this payment");
 
     const previous = order.status;
+    const paidNow = data.data.status === "success";
     order = await prisma.order.update({
       where: { id: order.id },
-      data:
-        data.data.status === "success"
-          ? {
-              status: "paid",
-              paystackReference: data.data.reference,
-              invoiceNumber: order.invoiceNumber ?? makeDocNumber("INV"),
-            }
-          : { status: "failed" },
+      data: paidNow
+        ? {
+            status: "paid",
+            paystackReference: data.data.reference,
+            invoiceNumber: order.invoiceNumber ?? makeDocNumber("INV"),
+          }
+        : { status: "failed" },
     });
+
+    if (paidNow && previous !== "paid") {
+      void decrementStockForPaidOrder(order.items).catch((err) =>
+        console.error("stock decrement failed", err)
+      );
+    }
 
     const view = toOrderView(order);
     void sendOrderStatusEmail(view, previous).catch((err) =>

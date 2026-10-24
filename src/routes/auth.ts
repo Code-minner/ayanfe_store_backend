@@ -40,7 +40,7 @@ function tokenUser(user: { id: string; email: string; role: string; name: string
   return {
     id: user.id,
     email: user.email,
-    role: user.role as "customer" | "admin",
+    role: user.role as AuthUser["role"],
     name: user.name,
   };
 }

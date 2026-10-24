@@ -514,6 +514,7 @@ async function main() {
       badge: p.on_sale ? "Sale" : null,
       subtitle: subtitle ?? null,
       stock,
+      // Flags are refined after import by repair-product-flags / end of this script
       isFeatured: false,
       isNewArrival: false,
       active,
@@ -543,12 +544,47 @@ async function main() {
   }
 
   let deactivatedWally = 0;
+  let featuredMarked = 0;
+  let newArrivalMarked = 0;
   if (!DRY_RUN) {
     const result = await prisma.product.updateMany({
       where: { slug: { contains: "-wally-" }, active: true },
       data: { active: false },
     });
     deactivatedWally = result.count;
+
+    const active = await prisma.product.findMany({
+      where: { active: true },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, categorySlug: true },
+    });
+    await prisma.product.updateMany({
+      data: { isFeatured: false, isNewArrival: false },
+    });
+    const newIds = active.slice(0, 24).map((p) => p.id);
+    if (newIds.length) {
+      const r = await prisma.product.updateMany({
+        where: { id: { in: newIds } },
+        data: { isNewArrival: true },
+      });
+      newArrivalMarked = r.count;
+    }
+    const byCat = new Map<string, string[]>();
+    for (const p of active) {
+      const list = byCat.get(p.categorySlug) ?? [];
+      if (list.length < 4) {
+        list.push(p.id);
+        byCat.set(p.categorySlug, list);
+      }
+    }
+    const featuredIds = [...byCat.values()].flat().slice(0, 48);
+    if (featuredIds.length) {
+      const r = await prisma.product.updateMany({
+        where: { id: { in: featuredIds } },
+        data: { isFeatured: true },
+      });
+      featuredMarked = r.count;
+    }
   }
 
   const totalInDb = DRY_RUN ? null : await prisma.product.count();
@@ -566,6 +602,8 @@ async function main() {
         issuesPreview: report.issues.slice(0, 40),
         issueCount: report.issues.length,
         deactivatedWally,
+        featuredMarked,
+        newArrivalMarked,
         totalInDb,
         activeInDb,
       },

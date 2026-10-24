@@ -1,5 +1,6 @@
 ﻿import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "../generated/prisma/client.js";
 import { prisma, withId, withIds } from "../db.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { AppError } from "../utils/AppError.js";
@@ -8,6 +9,13 @@ import { uploadProductImage } from "../middleware/upload.js";
 import { uploadProductImageBuffer } from "../services/cloudinary.js";
 
 const router = Router();
+
+const variantSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  price: z.number().nonnegative(),
+  stock: z.number().int().nonnegative(),
+});
 
 const productSchema = z.object({
   name: z.string().min(1),
@@ -21,6 +29,7 @@ const productSchema = z.object({
   categorySlug: z.string().min(1),
   category: z.string().optional().nullable(),
   colors: z.array(z.string()).optional(),
+  variants: z.array(variantSchema).optional(),
   badge: z.string().optional().nullable(),
   subtitle: z.string().optional().nullable(),
   stock: z.number().int().nonnegative().optional(),
@@ -28,6 +37,32 @@ const productSchema = z.object({
   isNewArrival: z.boolean().optional(),
   active: z.boolean().optional(),
 });
+
+function normalizeVariants(
+  variants: z.infer<typeof variantSchema>[] | undefined,
+  fallbackPrice: number,
+  fallbackStock: number
+) {
+  if (!variants?.length) {
+    return {
+      variants: [] as z.infer<typeof variantSchema>[],
+      price: fallbackPrice,
+      stock: fallbackStock,
+    };
+  }
+  const cleaned = variants.map((v) => ({
+    ...v,
+    id: v.id.trim() || v.label.toLowerCase().replace(/\s+/g, "-"),
+    label: v.label.trim(),
+  }));
+  const prices = cleaned.map((v) => v.price);
+  const stocks = cleaned.map((v) => v.stock);
+  return {
+    variants: cleaned,
+    price: Math.min(...prices),
+    stock: stocks.reduce((sum, n) => sum + n, 0),
+  };
+}
 
 const listSelect = {
   id: true,
@@ -40,6 +75,7 @@ const listSelect = {
   categorySlug: true,
   category: true,
   colors: true,
+  variants: true,
   badge: true,
   subtitle: true,
   stock: true,
@@ -62,6 +98,9 @@ router.get(
       isNewArrival?: boolean;
       OR?: Array<Record<string, unknown>>;
     } = adminAll ? {} : { active: true };
+
+    if (adminAll && req.query.status === "active") where.active = true;
+    if (adminAll && req.query.status === "inactive") where.active = false;
 
     if (typeof req.query.category === "string") where.categorySlug = req.query.category;
     if (req.query.featured === "true") where.isFeatured = true;
@@ -139,11 +178,31 @@ router.post(
     const body = productSchema.parse(req.body);
     const existing = await prisma.product.findUnique({ where: { slug: body.slug } });
     if (existing) throw new AppError(409, "A product with this slug already exists");
+    const normalized = normalizeVariants(
+      body.variants,
+      body.price,
+      body.stock ?? 100
+    );
     const product = await prisma.product.create({
       data: {
-        ...body,
+        name: body.name,
+        slug: body.slug,
+        description: body.description,
+        image: body.image,
         images: body.images?.length ? body.images : [body.image],
+        price: normalized.price,
+        originalPrice: body.originalPrice,
+        discountPercent: body.discountPercent,
+        categorySlug: body.categorySlug,
         category: body.category ?? body.categorySlug,
+        colors: body.colors,
+        variants: normalized.variants as Prisma.InputJsonValue,
+        badge: body.badge,
+        subtitle: body.subtitle,
+        stock: normalized.stock,
+        isFeatured: body.isFeatured,
+        isNewArrival: body.isNewArrival,
+        active: body.active,
       },
     });
     res.status(201).json({ product: withId(product) });
@@ -174,12 +233,33 @@ router.put(
   asyncHandler(async (req, res) => {
     const body = productSchema.partial().parse(req.body);
     try {
+      const existing = await prisma.product.findUnique({
+        where: { id: String(req.params.id) },
+      });
+      if (!existing) throw new AppError(404, "Product not found");
+
+      let data: Prisma.ProductUpdateInput = { ...body };
+      if (body.variants !== undefined) {
+        const normalized = normalizeVariants(
+          body.variants,
+          body.price ?? existing.price,
+          body.stock ?? existing.stock
+        );
+        data = {
+          ...body,
+          variants: normalized.variants as Prisma.InputJsonValue,
+          price: normalized.price,
+          stock: normalized.stock,
+        };
+      }
+
       const product = await prisma.product.update({
         where: { id: String(req.params.id) },
-        data: body,
+        data,
       });
       res.json({ product: withId(product) });
-    } catch {
+    } catch (err) {
+      if (err instanceof AppError) throw err;
       throw new AppError(404, "Product not found");
     }
   })

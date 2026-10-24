@@ -13,6 +13,7 @@ export const ORDER_STATUSES = [
 
 export type OrderItem = {
   productId?: string;
+  variantId?: string;
   name: string;
   image: string;
   price: number;
@@ -21,12 +22,17 @@ export type OrderItem = {
 };
 
 export type ShippingInfo = {
+  method?: "local_pickup" | "waybill" | "stockpile" | string;
   fullName?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
+  email?: string;
   address?: string;
   city?: string;
   state?: string;
   country?: string;
+  shippingFee?: number;
 };
 
 export type OrderView = Omit<Order, "items" | "shipping"> & {

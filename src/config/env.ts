@@ -23,6 +23,7 @@ export const env = {
     accountNumber: process.env.BANK_ACCOUNT_NUMBER ?? "9182747839",
   },
   checkoutFee: Number(process.env.CHECKOUT_FEE ?? 3500),
+  waybillFee: Number(process.env.WAYBILL_FEE ?? 500),
 
   // ZeptoMail
   zeptomailHost: process.env.ZEPTOMAIL_HOST ?? "api.zeptomail.com",

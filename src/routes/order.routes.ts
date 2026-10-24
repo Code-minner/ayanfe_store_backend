@@ -5,11 +5,12 @@ import { prisma } from "../db.js";
 import { getStoreSettings, getStoreSettingsView } from "../services/settings.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { AppError } from "../utils/AppError.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth, requireAdmin, requireStaff, isStaffRole } from "../middleware/auth.js";
 import checkoutRoutes from "./checkout.routes.js";
 import { makeDocNumber, renderPrintDocument } from "../services/documents.js";
 import { sendOrderStatusEmail } from "../services/mail.js";
 import { ORDER_STATUSES, toOrderView } from "../types/order.js";
+import { decrementStockForPaidOrder } from "../services/inventory.js";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get(
 router.get(
   "/print",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const type = z.enum(["invoice", "waybill"]).parse(req.query.type ?? "invoice");
     const ids = String(req.query.ids ?? "")
@@ -66,7 +67,7 @@ router.get(
 router.get(
   "/",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const where =
       typeof req.query.status === "string" && req.query.status !== "all"
@@ -75,7 +76,7 @@ router.get(
     const orders = await prisma.order.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: 500,
     });
     res.json({ orders: orders.map(toOrderView) });
   })
@@ -87,7 +88,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const order = await prisma.order.findUnique({ where: { id: String(req.params.id) } });
     if (!order) throw new AppError(404, "Order not found");
-    if (req.user!.role !== "admin" && order.userId !== req.user!.id) {
+    if (!isStaffRole(req.user!.role) && order.userId !== req.user!.id) {
       throw new AppError(403, "Not allowed");
     }
     res.json({ order: toOrderView(order) });
@@ -97,7 +98,7 @@ router.get(
 router.patch(
   "/:id/status",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const status = z.enum(ORDER_STATUSES).parse(req.body.status);
     const existing = await prisma.order.findUnique({ where: { id: String(req.params.id) } });
@@ -116,6 +117,12 @@ router.patch(
       },
     });
 
+    if (status === "paid" && previous !== "paid") {
+      void decrementStockForPaidOrder(order.items).catch((err) =>
+        console.error("stock decrement failed", err)
+      );
+    }
+
     const view = toOrderView(order);
     void sendOrderStatusEmail(view, previous).catch((err) =>
       console.error("status email failed", err)
@@ -128,16 +135,21 @@ router.patch(
 router.patch(
   "/:id/shipping",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const shipping = z
       .object({
+        method: z.enum(["local_pickup", "waybill", "stockpile"]).optional(),
         fullName: z.string().optional(),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
         phone: z.string().optional(),
+        email: z.string().optional(),
         address: z.string().optional(),
         city: z.string().optional(),
         state: z.string().optional(),
         country: z.string().optional(),
+        shippingFee: z.number().optional(),
       })
       .parse(req.body);
 

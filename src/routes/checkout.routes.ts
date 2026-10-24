@@ -12,22 +12,28 @@ import { uploadReceiptBuffer } from "../services/cloudinary.js";
 import { makeDocNumber } from "../services/documents.js";
 import { sendOrderPlacedEmails } from "../services/mail.js";
 import { toOrderView } from "../types/order.js";
+import { assertStockAvailable } from "../services/inventory.js";
 
 const router = Router();
 
 const itemSchema = z.object({
-  productId: z.string().optional(),
+  productId: z.string().min(1),
+  variantId: z.string().optional(),
   name: z.string().min(1),
   image: z.string().min(1),
   price: z.number().nonnegative(),
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().positive().max(5000),
   color: z.string().optional(),
 });
 
 const shippingSchema = z
   .object({
+    method: z.enum(["local_pickup", "waybill", "stockpile"]).optional(),
     fullName: z.string().optional(),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
     phone: z.string().optional(),
+    email: z.string().optional(),
     address: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
@@ -42,10 +48,14 @@ const checkoutSchema = z.object({
   shipping: shippingSchema,
 });
 
-function totals(items: z.infer<typeof itemSchema>[]) {
+function totals(
+  items: z.infer<typeof itemSchema>[],
+  shippingMethod?: string
+) {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const fee = env.checkoutFee;
-  return { subtotal, fee, total: subtotal + fee };
+  const shippingFee = shippingMethod === "waybill" ? env.waybillFee : 0;
+  const fee = env.checkoutFee + shippingFee;
+  return { subtotal, fee, shippingFee, total: subtotal + fee };
 }
 
 router.get(
@@ -55,6 +65,7 @@ router.get(
     res.json({
       bank: env.bank,
       checkoutFee: env.checkoutFee,
+      waybillFee: env.waybillFee,
       paystackPublicKey: settings.paystackEnabled ? env.paystackPublicKey || null : null,
       payments: {
         paystack: Boolean(settings.paystackEnabled && env.paystackSecretKey),
@@ -98,8 +109,11 @@ router.post(
     if (!parsed.success) throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid payload");
     if (!req.file) throw new AppError(400, "Please upload proof of payment");
 
+    await assertStockAvailable(parsed.data.items);
+
     const uploaded = await uploadReceiptBuffer(req.file.buffer, req.file.originalname);
-    const { subtotal, fee, total } = totals(parsed.data.items);
+    const method = parsed.data.shipping?.method;
+    const { subtotal, fee, shippingFee, total } = totals(parsed.data.items, method);
 
     const email = parsed.data.email.toLowerCase();
     let userId = req.user?.id;
@@ -110,6 +124,12 @@ router.post(
       });
       userId = existing?.id;
     }
+
+    const shippingPayload = {
+      ...(parsed.data.shipping ?? {}),
+      method: method ?? "local_pickup",
+      shippingFee,
+    };
 
     const order = await prisma.order.create({
       data: {
@@ -123,7 +143,7 @@ router.post(
         status: "pending_verification",
         receiptUrl: uploaded.url,
         customerNote: parsed.data.customerNote,
-        shipping: (parsed.data.shipping ?? {}) as Prisma.InputJsonValue,
+        shipping: shippingPayload as Prisma.InputJsonValue,
         invoiceNumber: makeDocNumber("INV"),
       },
     });
@@ -145,7 +165,15 @@ async function createPaystackOrder(req: Request, res: Response) {
   }
 
   const body = checkoutSchema.parse(req.body);
-  const { subtotal, fee, total } = totals(body.items);
+  await assertStockAvailable(body.items);
+  const method = body.shipping?.method;
+  const { subtotal, fee, shippingFee, total } = totals(body.items, method);
+
+  const shippingPayload = {
+    ...(body.shipping ?? {}),
+    method: method ?? "local_pickup",
+    shippingFee,
+  };
 
   const order = await prisma.order.create({
     data: {
@@ -158,7 +186,7 @@ async function createPaystackOrder(req: Request, res: Response) {
       paymentMethod: "paystack",
       status: "pending",
       customerNote: body.customerNote,
-      shipping: (body.shipping ?? {}) as Prisma.InputJsonValue,
+      shipping: shippingPayload as Prisma.InputJsonValue,
       invoiceNumber: makeDocNumber("INV"),
     },
   });
