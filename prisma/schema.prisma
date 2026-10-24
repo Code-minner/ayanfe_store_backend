@@ -26,6 +26,7 @@ enum OrderStatus {
   paid
   processing
   shipped
+  completed
   failed
   cancelled
 }
@@ -63,6 +64,7 @@ model Product {
   name            String
   slug            String         @unique
   description     String         @default("")
+  brand           String         @default("")
   image           String
   images          String[]       @default([])
   price           Float
@@ -133,8 +135,8 @@ model Settings {
   paystackEnabled     Boolean  @default(true)
   bankTransferEnabled Boolean  @default(true)
   adminNotifyEmail    String   @default("")
-  storeName           String   @default("Attog Store")
-  storeAddress        String   @default("")
+  storeName           String   @default("Ayanfe T.T.O Gracious")
+  storeAddress        String   @default("4b Fadipe street, (by Phidel Group of Schools, Seliat branch) 3rd building before Green Field hotel, seliat bus stop, Egbeda, Lagos.")
   storePhone          String   @default("")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
