@@ -22,8 +22,11 @@ export const env = {
     accountName: process.env.BANK_ACCOUNT_NAME ?? "ATTOG STORE",
     accountNumber: process.env.BANK_ACCOUNT_NUMBER ?? "9182747839",
   },
-  checkoutFee: Number(process.env.CHECKOUT_FEE ?? 3500),
+  checkoutFee: Number(process.env.CHECKOUT_FEE ?? 0),
   waybillFee: Number(process.env.WAYBILL_FEE ?? 500),
+  stockpileFee: Number(process.env.STOCKPILE_FEE ?? 50),
+  localPickupFee: Number(process.env.LOCAL_PICKUP_FEE ?? 50),
+  lagosDeliveryFee: Number(process.env.LAGOS_DELIVERY_FEE ?? 50),
 
   // ZeptoMail
   zeptomailHost: process.env.ZEPTOMAIL_HOST ?? "api.zeptomail.com",

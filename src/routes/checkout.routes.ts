@@ -13,6 +13,7 @@ import { makeDocNumber } from "../services/documents.js";
 import { sendOrderPlacedEmails } from "../services/mail.js";
 import { toOrderView } from "../types/order.js";
 import { assertStockAvailable } from "../services/inventory.js";
+import { shippingFeeFor, SHIPPING_METHOD_IDS } from "../services/shippingFees.js";
 
 const router = Router();
 
@@ -24,11 +25,13 @@ const itemSchema = z.object({
   price: z.number().nonnegative(),
   quantity: z.number().int().positive().max(5000),
   color: z.string().optional(),
+  size: z.string().optional(),
+  brand: z.string().optional(),
 });
 
 const shippingSchema = z
   .object({
-    method: z.enum(["local_pickup", "waybill", "stockpile"]).optional(),
+    method: z.enum(SHIPPING_METHOD_IDS).optional(),
     fullName: z.string().optional(),
     firstName: z.string().optional(),
     lastName: z.string().optional(),
@@ -53,9 +56,10 @@ function totals(
   shippingMethod?: string
 ) {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const shippingFee = shippingMethod === "waybill" ? env.waybillFee : 0;
-  const fee = env.checkoutFee + shippingFee;
-  return { subtotal, fee, shippingFee, total: subtotal + fee };
+  const shippingFee = shippingFeeFor(shippingMethod);
+  // `fee` on the order is fulfillment only. No flat checkout/service charge.
+  const fee = shippingFee;
+  return { subtotal, fee, shippingFee, total: subtotal + shippingFee };
 }
 
 router.get(
@@ -64,8 +68,11 @@ router.get(
     const settings = await getStoreSettings();
     res.json({
       bank: env.bank,
-      checkoutFee: env.checkoutFee,
+      checkoutFee: 0,
       waybillFee: env.waybillFee,
+      stockpileFee: env.stockpileFee,
+      localPickupFee: env.localPickupFee,
+      lagosDeliveryFee: env.lagosDeliveryFee,
       paystackPublicKey: settings.paystackEnabled ? env.paystackPublicKey || null : null,
       payments: {
         paystack: Boolean(settings.paystackEnabled && env.paystackSecretKey),
