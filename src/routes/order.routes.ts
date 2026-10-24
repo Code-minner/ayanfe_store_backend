@@ -145,6 +145,28 @@ router.get(
   })
 );
 
+/** Same print HTML as admin invoices, for the buying customer. */
+router.get(
+  "/:id/invoice",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    let order = await prisma.order.findUnique({ where: { id: String(req.params.id) } });
+    if (!order) throw new AppError(404, "Order not found");
+    if (!isStaffRole(req.user!.role) && order.userId !== req.user!.id) {
+      throw new AppError(403, "Not allowed");
+    }
+    if (!order.invoiceNumber) {
+      order = await prisma.order.update({
+        where: { id: order.id },
+        data: { invoiceNumber: makeDocNumber("INV") },
+      });
+    }
+    const settings = await getStoreSettingsView();
+    const html = renderPrintDocument([toOrderView(order)], settings, "invoice");
+    res.type("html").send(html);
+  })
+);
+
 router.patch(
   "/:id/status",
   requireAuth,
