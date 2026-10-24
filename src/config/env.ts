@@ -19,7 +19,7 @@ export const env = {
   paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY ?? "",
   bank: {
     bankName: process.env.BANK_NAME ?? "First Bank",
-    accountName: process.env.BANK_ACCOUNT_NAME ?? "AYANFE STORE",
+    accountName: process.env.BANK_ACCOUNT_NAME ?? "ATTOG STORE",
     accountNumber: process.env.BANK_ACCOUNT_NUMBER ?? "9182747839",
   },
   checkoutFee: Number(process.env.CHECKOUT_FEE ?? 3500),
@@ -31,7 +31,7 @@ export const env = {
   zeptomailFromEmail: (process.env.ZEPTOMAIL_FROM_EMAIL ?? "noreply@ayanfewholesale.com")
     .replace(/^["']|["']$/g, "")
     .trim(),
-  zeptomailFromName: (process.env.ZEPTOMAIL_FROM_NAME ?? "Ayanfe Stores")
+  zeptomailFromName: (process.env.ZEPTOMAIL_FROM_NAME ?? "Attog Store")
     .replace(/^["']|["']$/g, "")
     .trim(),
   adminEmail: process.env.ADMIN_EMAIL ?? process.env.ADMIN_NOTIFY_EMAIL ?? "",

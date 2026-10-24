@@ -91,7 +91,7 @@ async function seed() {
       data: {
         key: "store",
         paystackEnabled: Boolean(process.env.PAYSTACK_SECRET_KEY),
-        storeName: "Ayanfe Stores",
+        storeName: "Attog Store",
         adminNotifyEmail: process.env.ADMIN_EMAIL ?? "ayanfewholesaledev@gmail.com",
       },
     });

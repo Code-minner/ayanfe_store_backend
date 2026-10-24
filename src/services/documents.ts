@@ -43,7 +43,7 @@ function invoicePage(order: OrderView, settings: SettingsView) {
   <section class="sheet">
     <header class="row">
       <div>
-        <h1>${escapeHtml(settings.storeName || "Ayanfe Store")}</h1>
+        <h1>${escapeHtml(settings.storeName || "Attog Store")}</h1>
         <p class="muted">${escapeHtml(settings.storeAddress || "")}<br/>${escapeHtml(settings.storePhone || "")}</p>
       </div>
       <div class="right">
@@ -84,7 +84,7 @@ function waybillPage(order: OrderView, settings: SettingsView) {
   <section class="sheet waybill">
     <header class="row">
       <div>
-        <h1>${escapeHtml(settings.storeName || "Ayanfe Store")}</h1>
+        <h1>${escapeHtml(settings.storeName || "Attog Store")}</h1>
         <p class="muted">WAYBILL</p>
       </div>
       <div class="right">
@@ -95,7 +95,7 @@ function waybillPage(order: OrderView, settings: SettingsView) {
     <div class="grid2">
       <div class="box">
         <h3>From</h3>
-        <p><strong>${escapeHtml(settings.storeName || "Ayanfe Store")}</strong><br/>
+        <p><strong>${escapeHtml(settings.storeName || "Attog Store")}</strong><br/>
         ${escapeHtml(settings.storeAddress || "")}<br/>
         ${escapeHtml(settings.storePhone || "")}</p>
       </div>
@@ -132,7 +132,7 @@ export function renderPrintDocument(
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Ayanfe ${title}</title>
+  <title>Attog ${title}</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: Georgia, "Times New Roman", serif; color: #111; margin: 0; background: #f4f4f4; }

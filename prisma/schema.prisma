@@ -133,7 +133,7 @@ model Settings {
   paystackEnabled     Boolean  @default(true)
   bankTransferEnabled Boolean  @default(true)
   adminNotifyEmail    String   @default("")
-  storeName           String   @default("Ayanfe Store")
+  storeName           String   @default("Attog Store")
   storeAddress        String   @default("")
   storePhone          String   @default("")
   createdAt           DateTime @default(now())
