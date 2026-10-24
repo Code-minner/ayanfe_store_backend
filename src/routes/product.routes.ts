@@ -265,4 +265,17 @@ router.put(
   })
 );
 
+router.delete(
+  "/:id",
+  requireAuth,
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) throw new AppError(404, "Product not found");
+    await prisma.product.delete({ where: { id } });
+    res.json({ ok: true, id });
+  })
+);
+
 export default router;

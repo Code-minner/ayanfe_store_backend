@@ -4,6 +4,7 @@ import { prisma } from "../db.js";
 import { getStoreSettings, getStoreSettingsView } from "../services/settings.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { AppError } from "../utils/AppError.js";
 import { toSettingsView } from "../types/order.js";
 
 const router = Router();
@@ -37,12 +38,22 @@ router.put(
       })
       .parse(req.body);
 
+    if (body.payments && req.user!.role !== "super_admin") {
+      throw new AppError(403, "Only super admin can change payment options");
+    }
+
     const current = await getStoreSettings();
     const settings = await prisma.settings.update({
       where: { id: current.id },
       data: {
-        paystackEnabled: body.payments?.paystack ?? current.paystackEnabled,
-        bankTransferEnabled: body.payments?.bankTransfer ?? current.bankTransferEnabled,
+        paystackEnabled:
+          req.user!.role === "super_admin" && body.payments?.paystack !== undefined
+            ? body.payments.paystack
+            : current.paystackEnabled,
+        bankTransferEnabled:
+          req.user!.role === "super_admin" && body.payments?.bankTransfer !== undefined
+            ? body.payments.bankTransfer
+            : current.bankTransferEnabled,
         adminNotifyEmail: body.adminNotifyEmail ?? current.adminNotifyEmail,
         storeName: body.storeName ?? current.storeName,
         storeAddress: body.storeAddress ?? current.storeAddress,
