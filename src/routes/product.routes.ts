@@ -15,6 +15,8 @@ const variantSchema = z.object({
   label: z.string().min(1),
   price: z.number().nonnegative(),
   stock: z.number().int().nonnegative(),
+  /** Cap how many of this size/option one customer can buy per order. */
+  maxPerOrder: z.number().int().positive().optional(),
 });
 
 const productSchema = z.object({
@@ -52,9 +54,11 @@ function normalizeVariants(
     };
   }
   const cleaned = variants.map((v) => ({
-    ...v,
     id: v.id.trim() || v.label.toLowerCase().replace(/\s+/g, "-"),
     label: v.label.trim(),
+    price: v.price,
+    stock: v.stock,
+    ...(v.maxPerOrder && v.maxPerOrder > 0 ? { maxPerOrder: v.maxPerOrder } : {}),
   }));
   const prices = cleaned.map((v) => v.price);
   const stocks = cleaned.map((v) => v.stock);

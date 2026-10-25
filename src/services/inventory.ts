@@ -15,6 +15,7 @@ export type PackVariant = {
   label: string;
   price: number;
   stock: number;
+  maxPerOrder?: number;
 };
 
 export function parseVariants(raw: unknown): PackVariant[] {
@@ -29,12 +30,20 @@ export function parseVariants(raw: unknown): PackVariant[] {
         typeof (v as PackVariant).price === "number" &&
         typeof (v as PackVariant).stock === "number"
     )
-    .map((v) => ({
-      id: v.id,
-      label: v.label,
-      price: v.price,
-      stock: Math.max(0, Math.floor(v.stock)),
-    }));
+    .map((v) => {
+      const maxRaw = (v as PackVariant).maxPerOrder;
+      const maxPerOrder =
+        typeof maxRaw === "number" && Number.isFinite(maxRaw) && maxRaw > 0
+          ? Math.floor(maxRaw)
+          : undefined;
+      return {
+        id: v.id,
+        label: v.label,
+        price: v.price,
+        stock: Math.max(0, Math.floor(v.stock)),
+        ...(maxPerOrder ? { maxPerOrder } : {}),
+      };
+    });
 }
 
 function lineKey(line: OrderLineInput) {
@@ -89,6 +98,12 @@ export async function assertStockAvailable(items: OrderLineInput[]) {
         throw new AppError(
           400,
           `Pack option for "${line.name}" is no longer available. Please choose another pack.`
+        );
+      }
+      if (pack.maxPerOrder && line.quantity > pack.maxPerOrder) {
+        throw new AppError(
+          400,
+          `You can only buy ${pack.maxPerOrder} of "${product.name}" size ${pack.label}. Please pick another size for the rest.`
         );
       }
       if (line.quantity > pack.stock) {
