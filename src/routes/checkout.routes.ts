@@ -9,7 +9,17 @@ import { AppError } from "../utils/AppError.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { uploadReceipt } from "../middleware/upload.js";
 import { uploadReceiptBuffer } from "../services/cloudinary.js";
-import { makeDocNumber } from "../services/documents.js";
+import { makeUniqueDocNumber } from "../services/documents.js";
+
+async function nextInvoiceNumber() {
+  return makeUniqueDocNumber(async (code) => {
+    const hit = await prisma.order.findFirst({
+      where: { invoiceNumber: code },
+      select: { id: true },
+    });
+    return Boolean(hit);
+  });
+}
 import { sendOrderPlacedEmails } from "../services/mail.js";
 import { toOrderView } from "../types/order.js";
 import { assertStockAvailable } from "../services/inventory.js";
@@ -151,7 +161,7 @@ router.post(
         receiptUrl: uploaded.url,
         customerNote: parsed.data.customerNote,
         shipping: shippingPayload as Prisma.InputJsonValue,
-        invoiceNumber: makeDocNumber("INV"),
+        invoiceNumber: await nextInvoiceNumber(),
       },
     });
 
@@ -194,7 +204,7 @@ async function createPaystackOrder(req: Request, res: Response) {
       status: "pending",
       customerNote: body.customerNote,
       shipping: shippingPayload as Prisma.InputJsonValue,
-      invoiceNumber: makeDocNumber("INV"),
+      invoiceNumber: await nextInvoiceNumber(),
     },
   });
 

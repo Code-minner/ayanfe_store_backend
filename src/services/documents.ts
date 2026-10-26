@@ -67,20 +67,27 @@ function storeIdentity(settings: SettingsView) {
   return { name, address, phone };
 }
 
+function looksLikeSizeLabel(value: string) {
+  const t = value.trim();
+  return /^\d{2,3}$/.test(t) || /^age\s*\d+/i.test(t) || /^(xxs|xs|s|m|l|xl|xxl|xxxl)$/i.test(t);
+}
+
 function productCell(item: OrderItem) {
-  const titleBits = [item.color, item.size].filter(Boolean) as string[];
+  const option = item.size?.trim() || "";
+  const titleBits = [item.color, option].filter(Boolean) as string[];
   const titleSuffix = titleBits.length ? ` - ${titleBits.join(", ")}` : "";
   const lines: string[] = [
     `<div class="pname">${escapeHtml(item.name)}${escapeHtml(titleSuffix)}</div>`,
   ];
-  if (item.color) {
-    lines.push(`<div class="psub">Color: ${escapeHtml(item.color)}</div>`);
+  if (item.brand?.trim()) {
+    lines.push(`<div class="psub">Brand: ${escapeHtml(item.brand.trim())}</div>`);
   }
-  if (item.size) {
-    lines.push(`<div class="psub">Size: ${escapeHtml(item.size)}</div>`);
+  if (option) {
+    const label = looksLikeSizeLabel(option) ? "Size" : "Option";
+    lines.push(`<div class="psub">${label}: ${escapeHtml(option)}</div>`);
   }
-  if (item.brand) {
-    lines.push(`<div class="psub">Brand: ${escapeHtml(item.brand)}</div>`);
+  if (item.color?.trim()) {
+    lines.push(`<div class="psub">Color: ${escapeHtml(item.color.trim())}</div>`);
   }
   return lines.join("");
 }
@@ -186,7 +193,7 @@ function waybillPage(order: OrderView, settings: SettingsView) {
   const store = storeIdentity(settings);
   const itemSummary = order.items
     .map((i) => {
-      const bits = [i.color, i.size].filter(Boolean).join(", ");
+      const bits = [i.brand, i.size, i.color].filter(Boolean).join(", ");
       return `${i.quantity}x ${i.name}${bits ? ` (${bits})` : ""}`;
     })
     .join(", ");
@@ -397,9 +404,24 @@ export function renderPrintDocument(
 </html>`;
 }
 
-export function makeDocNumber(prefix: string) {
-  const d = new Date();
-  const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${prefix}-${stamp}-${rand}`;
+/** Short customer-facing order / doc code (4 chars), e.g. K7M2 */
+export function makeDocNumber(_prefix?: string) {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 4; i++) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return code;
+}
+
+/** Prefer a free 4-char code; falls back to a slightly longer code if needed. */
+export async function makeUniqueDocNumber(
+  exists: (code: string) => Promise<boolean>,
+  prefix?: string
+) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const code = makeDocNumber(prefix);
+    if (!(await exists(code))) return code;
+  }
+  return `${makeDocNumber(prefix)}${makeDocNumber(prefix).slice(0, 2)}`;
 }

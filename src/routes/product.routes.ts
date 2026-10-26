@@ -102,11 +102,14 @@ router.get(
       categorySlug?: string;
       isFeatured?: boolean;
       isNewArrival?: boolean;
+      stock?: { lte: number } | { gt: number };
       OR?: Array<Record<string, unknown>>;
     } = adminAll ? {} : { active: true };
 
     if (adminAll && req.query.status === "active") where.active = true;
     if (adminAll && req.query.status === "inactive") where.active = false;
+    if (adminAll && req.query.stock === "out") where.stock = { lte: 0 };
+    if (adminAll && req.query.stock === "in") where.stock = { gt: 0 };
 
     if (typeof req.query.category === "string") where.categorySlug = req.query.category;
     if (req.query.featured === "true") where.isFeatured = true;
