@@ -425,4 +425,67 @@ router.patch(
   })
 );
 
+/** Suspend / reactivate staff. Super admin only. Blocks login when inactive. */
+router.patch(
+  "/admins/:id/status",
+  requireSuperAdmin,
+  asyncHandler(async (req, res) => {
+    const body = z.object({ active: z.boolean() }).parse(req.body);
+    const existing = await prisma.user.findFirst({
+      where: {
+        id: String(req.params.id),
+        role: { in: [...STAFF_ROLES] },
+      },
+    });
+    if (!existing) throw new AppError(404, "Staff member not found");
+    if (existing.id === req.user!.id) {
+      throw new AppError(400, "You cannot suspend your own account");
+    }
+    if (existing.role === "super_admin" && body.active === false) {
+      const supers = await prisma.user.count({
+        where: { role: "super_admin", active: true },
+      });
+      if (supers <= 1) {
+        throw new AppError(400, "You cannot suspend the last active super admin");
+      }
+    }
+
+    const user = await prisma.user.update({
+      where: { id: existing.id },
+      data: { active: body.active },
+    });
+    res.json({ admin: publicAdmin(user) });
+  })
+);
+
+/**
+ * Delete staff (Customer Care or Admin). Super admin only.
+ * Other super admins cannot be deleted here (demote/suspend first if needed).
+ */
+router.delete(
+  "/admins/:id",
+  requireSuperAdmin,
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.user.findFirst({
+      where: {
+        id: String(req.params.id),
+        role: { in: [...STAFF_ROLES] },
+      },
+    });
+    if (!existing) throw new AppError(404, "Staff member not found");
+    if (existing.id === req.user!.id) {
+      throw new AppError(400, "You cannot delete your own account");
+    }
+    if (existing.role === "super_admin") {
+      throw new AppError(
+        400,
+        "You cannot delete a super admin. Demote or suspend them first."
+      );
+    }
+
+    await prisma.user.delete({ where: { id: existing.id } });
+    res.json({ ok: true, id: existing.id });
+  })
+);
+
 export default router;
