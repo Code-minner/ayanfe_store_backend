@@ -16,6 +16,8 @@ function productCard(product: {
   price: number;
   originalPrice: number | null;
   discountPercent: number | null;
+  bonusQty: number | null;
+  bonusPercent: number | null;
   categorySlug: string;
   category: string | null;
   colors: string[];
@@ -33,6 +35,8 @@ function productCard(product: {
     price: product.price,
     originalPrice: product.originalPrice ?? undefined,
     discountPercent: product.discountPercent ?? undefined,
+    bonusQty: product.bonusQty ?? undefined,
+    bonusPercent: product.bonusPercent ?? undefined,
     categorySlug: product.categorySlug,
     category: product.category ?? undefined,
     colors: product.colors,
@@ -60,10 +64,14 @@ router.get(
       include: { product: true },
       orderBy: { createdAt: "desc" },
     });
+    // Hide inactive / out-of-stock products on the storefront wishlist.
+    const visible = rows.filter(
+      (r) => r.product.active && (r.product.stock ?? 0) > 0
+    );
     res.json({
-      items: rows.map((r) => productCard(r.product)),
-      ids: rows.map((r) => r.productId),
-      slugs: rows.map((r) => r.product.slug),
+      items: visible.map((r) => productCard(r.product)),
+      ids: visible.map((r) => r.productId),
+      slugs: visible.map((r) => r.product.slug),
     });
   })
 );

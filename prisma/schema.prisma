@@ -70,6 +70,10 @@ model Product {
   price           Float
   originalPrice   Float?
   discountPercent Float?
+  /** Buy this many of the product (all sizes/colors combined) to unlock bonusPercent off. */
+  bonusQty        Int?
+  /** Percent off unit price when cart qty for this product >= bonusQty (e.g. 5 = 5% off). */
+  bonusPercent    Float?
   categorySlug    String
   category        String?
   colors          String[]       @default([])

@@ -28,6 +28,10 @@ const productSchema = z.object({
   price: z.number().nonnegative(),
   originalPrice: z.number().optional().nullable(),
   discountPercent: z.number().optional().nullable(),
+  /** Min units of this product (all options combined) to unlock the % off. */
+  bonusQty: z.number().int().positive().optional().nullable(),
+  /** Percent off when bonusQty is met (1–100). */
+  bonusPercent: z.number().positive().max(100).optional().nullable(),
   categorySlug: z.string().min(1),
   category: z.string().optional().nullable(),
   brand: z.string().optional().nullable(),
@@ -77,6 +81,8 @@ const listSelect = {
   price: true,
   originalPrice: true,
   discountPercent: true,
+  bonusQty: true,
+  bonusPercent: true,
   categorySlug: true,
   category: true,
   brand: true,
@@ -92,6 +98,22 @@ const listSelect = {
   updatedAt: true,
 } as const;
 
+/** True when base stock or any size/option still has units to sell. */
+function productHasSellableStock(product: {
+  stock: number;
+  variants?: unknown;
+}): boolean {
+  if ((product.stock ?? 0) > 0) return true;
+  if (!Array.isArray(product.variants)) return false;
+  return product.variants.some(
+    (v) =>
+      v &&
+      typeof v === "object" &&
+      typeof (v as { stock?: unknown }).stock === "number" &&
+      (v as { stock: number }).stock > 0
+  );
+}
+
 router.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -104,7 +126,7 @@ router.get(
       isNewArrival?: boolean;
       stock?: { lte: number } | { gt: number };
       OR?: Array<Record<string, unknown>>;
-    } = adminAll ? {} : { active: true };
+    } = adminAll ? {} : { active: true, stock: { gt: 0 } };
 
     if (adminAll && req.query.status === "active") where.active = true;
     if (adminAll && req.query.status === "inactive") where.active = false;
@@ -168,6 +190,10 @@ router.get(
     }
     if (!product) throw new AppError(404, "Product not found");
     if (!product.active && !includeInactive) throw new AppError(404, "Product not found");
+    // Storefront only shows products with stock. Admin can still open OOS items.
+    if (!includeInactive && !productHasSellableStock(product)) {
+      throw new AppError(404, "Product not found");
+    }
 
     if (!includeInactive) {
       res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
@@ -202,6 +228,8 @@ router.post(
         price: normalized.price,
         originalPrice: body.originalPrice,
         discountPercent: body.discountPercent,
+        bonusQty: body.bonusQty ?? null,
+        bonusPercent: body.bonusPercent ?? null,
         categorySlug: body.categorySlug,
         category: body.category ?? body.categorySlug,
         brand: body.brand ?? "",

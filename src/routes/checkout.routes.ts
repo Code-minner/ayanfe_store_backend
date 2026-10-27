@@ -24,6 +24,11 @@ import { sendOrderPlacedEmails } from "../services/mail.js";
 import { toOrderView } from "../types/order.js";
 import { assertStockAvailable } from "../services/inventory.js";
 import { shippingFeeFor, SHIPPING_METHOD_IDS } from "../services/shippingFees.js";
+import {
+  listUnitPrice,
+  roundMoney,
+  unitPriceWithBonus,
+} from "../services/quantityBonus.js";
 
 const router = Router();
 
@@ -61,15 +66,65 @@ const checkoutSchema = z.object({
   shipping: shippingSchema,
 });
 
-function totals(
-  items: z.infer<typeof itemSchema>[],
-  shippingMethod?: string
-) {
-  const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+type CheckoutItem = z.infer<typeof itemSchema>;
+
+/**
+ * Reprice lines from DB and apply product quantity bonuses.
+ * Qty is summed per productId across sizes/colors. Unit price comes from
+ * the variant (or base price), not the client-sent price.
+ */
+async function applyCatalogPricing(items: CheckoutItem[]): Promise<CheckoutItem[]> {
+  const ids = [...new Set(items.map((i) => i.productId))];
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      price: true,
+      variants: true,
+      bonusQty: true,
+      bonusPercent: true,
+      active: true,
+    },
+  });
+  const byId = new Map(products.map((p) => [p.id, p]));
+
+  const qtyByProduct = new Map<string, number>();
+  for (const item of items) {
+    qtyByProduct.set(
+      item.productId,
+      (qtyByProduct.get(item.productId) || 0) + item.quantity
+    );
+  }
+
+  return items.map((item) => {
+    const product = byId.get(item.productId);
+    if (!product || !product.active) {
+      throw new AppError(400, `Product unavailable: ${item.name}`);
+    }
+    const list = listUnitPrice({
+      productPrice: product.price,
+      variants: product.variants,
+      variantId: item.variantId,
+    });
+    const productQty = qtyByProduct.get(item.productId) || item.quantity;
+    const price = unitPriceWithBonus(
+      list,
+      product.bonusQty,
+      product.bonusPercent,
+      productQty
+    );
+    return { ...item, price };
+  });
+}
+
+function totals(items: CheckoutItem[], shippingMethod?: string) {
+  const subtotal = roundMoney(
+    items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  );
   const shippingFee = shippingFeeFor(shippingMethod);
   // `fee` on the order is fulfillment only. No flat checkout/service charge.
   const fee = shippingFee;
-  return { subtotal, fee, shippingFee, total: subtotal + shippingFee };
+  return { subtotal, fee, shippingFee, total: roundMoney(subtotal + shippingFee) };
 }
 
 router.get(
@@ -127,10 +182,11 @@ router.post(
     if (!req.file) throw new AppError(400, "Please upload proof of payment");
 
     await assertStockAvailable(parsed.data.items);
+    const pricedItems = await applyCatalogPricing(parsed.data.items);
 
     const uploaded = await uploadReceiptBuffer(req.file.buffer, req.file.originalname);
     const method = parsed.data.shipping?.method;
-    const { subtotal, fee, shippingFee, total } = totals(parsed.data.items, method);
+    const { subtotal, fee, shippingFee, total } = totals(pricedItems, method);
 
     const email = parsed.data.email.toLowerCase();
     let userId = req.user?.id;
@@ -152,7 +208,7 @@ router.post(
       data: {
         userId,
         email,
-        items: parsed.data.items as Prisma.InputJsonValue,
+        items: pricedItems as Prisma.InputJsonValue,
         subtotal,
         fee,
         total,
@@ -183,8 +239,9 @@ async function createPaystackOrder(req: Request, res: Response) {
 
   const body = checkoutSchema.parse(req.body);
   await assertStockAvailable(body.items);
+  const pricedItems = await applyCatalogPricing(body.items);
   const method = body.shipping?.method;
-  const { subtotal, fee, shippingFee, total } = totals(body.items, method);
+  const { subtotal, fee, shippingFee, total } = totals(pricedItems, method);
 
   const shippingPayload = {
     ...(body.shipping ?? {}),
@@ -196,7 +253,7 @@ async function createPaystackOrder(req: Request, res: Response) {
     data: {
       userId: req.user?.id,
       email: body.email,
-      items: body.items as Prisma.InputJsonValue,
+      items: pricedItems as Prisma.InputJsonValue,
       subtotal,
       fee,
       total,
