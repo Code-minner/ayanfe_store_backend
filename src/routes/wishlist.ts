@@ -20,7 +20,9 @@ function productCard(product: {
   bonusPercent: number | null;
   categorySlug: string;
   category: string | null;
+  brand?: string | null;
   colors: string[];
+  variants?: unknown;
   badge: string | null;
   subtitle: string | null;
   stock: number;
@@ -39,7 +41,9 @@ function productCard(product: {
     bonusPercent: product.bonusPercent ?? undefined,
     categorySlug: product.categorySlug,
     category: product.category ?? undefined,
+    brand: product.brand ?? undefined,
     colors: product.colors,
+    variants: product.variants ?? null,
     badge: product.badge ?? undefined,
     subtitle: product.subtitle ?? undefined,
     stock: product.stock,

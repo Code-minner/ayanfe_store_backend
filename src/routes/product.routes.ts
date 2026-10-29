@@ -17,6 +17,8 @@ const variantSchema = z.object({
   stock: z.number().int().nonnegative(),
   /** Cap how many of this size/option one customer can buy per order. */
   maxPerOrder: z.number().int().positive().optional(),
+  /** Colors available for this size/option only. */
+  colors: z.array(z.string().min(1)).optional(),
 });
 
 const productSchema = z.object({
@@ -55,21 +57,39 @@ function normalizeVariants(
       variants: [] as z.infer<typeof variantSchema>[],
       price: fallbackPrice,
       stock: fallbackStock,
+      colors: null as string[] | null,
     };
   }
-  const cleaned = variants.map((v) => ({
-    id: v.id.trim() || v.label.toLowerCase().replace(/\s+/g, "-"),
-    label: v.label.trim(),
-    price: v.price,
-    stock: v.stock,
-    ...(v.maxPerOrder && v.maxPerOrder > 0 ? { maxPerOrder: v.maxPerOrder } : {}),
-  }));
+  const cleaned = variants.map((v) => {
+    const colors = Array.isArray(v.colors)
+      ? [
+          ...new Set(
+            v.colors
+              .map((c) => String(c || "").trim())
+              .filter(Boolean)
+          ),
+        ]
+      : [];
+    return {
+      id: v.id.trim() || v.label.toLowerCase().replace(/\s+/g, "-"),
+      label: v.label.trim(),
+      price: v.price,
+      stock: v.stock,
+      ...(v.maxPerOrder && v.maxPerOrder > 0 ? { maxPerOrder: v.maxPerOrder } : {}),
+      ...(colors.length ? { colors } : {}),
+    };
+  });
   const prices = cleaned.map((v) => v.price);
   const stocks = cleaned.map((v) => v.stock);
+  // Flat list for product cards / legacy clients (unique colors across sizes).
+  const flatColors = [
+    ...new Set(cleaned.flatMap((v) => ("colors" in v && Array.isArray(v.colors) ? v.colors : []))),
+  ];
   return {
     variants: cleaned,
     price: Math.min(...prices),
     stock: stocks.reduce((sum, n) => sum + n, 0),
+    colors: flatColors,
   };
 }
 
@@ -233,7 +253,10 @@ router.post(
         categorySlug: body.categorySlug,
         category: body.category ?? body.categorySlug,
         brand: body.brand ?? "",
-        colors: body.colors,
+        colors:
+          normalized.variants.length > 0
+            ? normalized.colors ?? []
+            : body.colors ?? [],
         variants: normalized.variants as Prisma.InputJsonValue,
         badge: body.badge,
         subtitle: body.subtitle,
@@ -288,6 +311,13 @@ router.put(
           variants: normalized.variants as Prisma.InputJsonValue,
           price: normalized.price,
           stock: normalized.stock,
+          // Keep product.colors in sync with per-size colors for cards / legacy.
+          colors:
+            normalized.variants.length > 0
+              ? normalized.colors ?? []
+              : body.colors !== undefined
+                ? body.colors
+                : existing.colors,
         };
       }
 
