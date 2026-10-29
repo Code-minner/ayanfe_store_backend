@@ -67,24 +67,60 @@ function absoluteImageUrl(src: string | undefined | null): string | null {
   return null;
 }
 
-/** Same Attog mark as printed invoices. Prefer PNG (email-safe). */
-function emailLogoHtml() {
+const LOGO_CID = "attog-logo";
+
+function readLogoPng(): Buffer | null {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     join(here, "../../assets/attog-logo.png"),
-    // Local monorepo fallback (admin public brand asset).
     join(here, "../../../ayanfe_store_admin/public/brand/attog-logo.png"),
+    join(here, "../../../ayanfe_store_frontend/public/brand/attog-logo.png"),
   ];
   for (const pngPath of candidates) {
     try {
-      const buf = readFileSync(pngPath);
-      const src = `data:image/png;base64,${buf.toString("base64")}`;
-      return `<img src="${src}" alt="Attog Store" width="160" height="36" style="display:block;width:160px;height:auto;border:0;outline:none" />`;
+      return readFileSync(pngPath);
     } catch {
       /* try next */
     }
   }
-  // Text mark if the PNG asset is missing (still brand purple).
+  return null;
+}
+
+/**
+ * Public https:// logo URL. Gmail strips data:image base64 embeds;
+ * product photos show because they are https:// (Cloudinary).
+ */
+function resolveEmailLogoUrl(): string | null {
+  if (env.emailLogoUrl && /^https:\/\//i.test(env.emailLogoUrl)) {
+    return env.emailLogoUrl;
+  }
+  if (env.storefrontUrl && /^https:\/\//i.test(env.storefrontUrl)) {
+    return `${env.storefrontUrl}/brand/attog-logo.png`;
+  }
+  if (env.adminAppUrl && /^https:\/\//i.test(env.adminAppUrl)) {
+    return `${env.adminAppUrl}/brand/attog-logo.png`;
+  }
+  const httpsOrigin = env.corsOrigin.find((o) => /^https:\/\//i.test(o));
+  if (httpsOrigin) {
+    return `${httpsOrigin.replace(/\/$/, "")}/brand/attog-logo.png`;
+  }
+  return null;
+}
+
+/**
+ * Email-safe logo.
+ * Prefer a public https:// URL first (same reason product images show in Gmail).
+ * If no public URL is configured, use ZeptoMail CID inline attachment.
+ * Never use data:image base64 (Gmail strips it).
+ */
+function emailLogoHtml() {
+  const remote = resolveEmailLogoUrl();
+  if (remote) {
+    return `<img src="${escapeHtml(remote)}" alt="Attog Store" width="160" height="36" style="display:block;width:160px;max-width:160px;height:auto;border:0;outline:none" />`;
+  }
+  if (readLogoPng()) {
+    return `<img src="cid:${LOGO_CID}" alt="Attog Store" width="160" height="36" style="display:block;width:160px;max-width:160px;height:auto;border:0;outline:none" />`;
+  }
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;letter-spacing:0.08em;color:${BRAND.logo};line-height:1">ATTOG</div>`;
 }
 
@@ -373,11 +409,37 @@ async function sendMail(opts: { to: string; subject: string; html: string }) {
       to: opts.to,
       subject: opts.subject,
       htmlBytes: opts.html.length,
+      logoUrl: resolveEmailLogoUrl(),
     });
     return { queued: false, mode: "console" as const };
   }
 
+  // Attach logo as ZeptoMail inline image (cid:attog-logo). Gmail blocks data: URIs
+  // but shows CID inlines and remote https images (same as product photos).
+  const logoBuf = readLogoPng();
+  const inlineImages = logoBuf
+    ? [
+        {
+          cid: LOGO_CID,
+          name: "attog-logo.png",
+          mime_type: "image/png",
+          content: logoBuf.toString("base64"),
+        },
+      ]
+    : undefined;
+
   const auth = token.startsWith("Zoho-") ? token : `Zoho-enczapikey ${token}`;
+  const payload: Record<string, unknown> = {
+    from: {
+      address: env.zeptomailFromEmail,
+      name: env.zeptomailFromName,
+    },
+    to: [{ email_address: { address: opts.to, name: opts.to } }],
+    subject: opts.subject,
+    htmlbody: opts.html,
+  };
+  if (inlineImages) payload.inline_images = inlineImages;
+
   const res = await fetch(zeptoEndpoint(), {
     method: "POST",
     headers: {
@@ -385,15 +447,7 @@ async function sendMail(opts: { to: string; subject: string; html: string }) {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: JSON.stringify({
-      from: {
-        address: env.zeptomailFromEmail,
-        name: env.zeptomailFromName,
-      },
-      to: [{ email_address: { address: opts.to, name: opts.to } }],
-      subject: opts.subject,
-      htmlbody: opts.html,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -506,7 +560,7 @@ export async function sendAdminInviteEmail(opts: {
 }) {
   const settings = await getStoreSettings();
   const store = settings.storeName || env.zeptomailFromName;
-  const adminUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
+  const adminUrl = env.adminAppUrl || "http://localhost:3001";
 
   return sendMail({
     to: opts.to,

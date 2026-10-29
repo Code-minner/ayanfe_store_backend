@@ -39,6 +39,23 @@ export const env = {
     .trim(),
   adminEmail: process.env.ADMIN_EMAIL ?? process.env.ADMIN_NOTIFY_EMAIL ?? "",
   nodeEnv: process.env.NODE_ENV ?? "development",
+  /** Public storefront origin (for email logo / links). */
+  storefrontUrl: (process.env.STOREFRONT_URL ?? "")
+    .replace(/^["']|["']$/g, "")
+    .trim()
+    .replace(/\/$/, ""),
+  /** Public admin origin. */
+  adminAppUrl: (process.env.ADMIN_APP_URL ?? "")
+    .replace(/^["']|["']$/g, "")
+    .trim()
+    .replace(/\/$/, ""),
+  /**
+   * Absolute HTTPS logo for emails. Gmail blocks data: URIs; product images work
+   * because they are https://. Prefer a Cloudinary or site /brand/attog-logo.png URL.
+   */
+  emailLogoUrl: (process.env.EMAIL_LOGO_URL ?? "")
+    .replace(/^["']|["']$/g, "")
+    .trim(),
 
   // Cloudinary
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
