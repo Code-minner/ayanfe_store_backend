@@ -107,6 +107,9 @@ function resolveEmailLogoUrl(): string | null {
   return null;
 }
 
+const LOGO_IMG_STYLE =
+  "display:block;width:96px;max-width:96px;height:auto;border:0;outline:none;text-decoration:none";
+
 /**
  * Email-safe logo.
  * Prefer a public https:// URL first (same reason product images show in Gmail).
@@ -116,12 +119,12 @@ function resolveEmailLogoUrl(): string | null {
 function emailLogoHtml() {
   const remote = resolveEmailLogoUrl();
   if (remote) {
-    return `<img src="${escapeHtml(remote)}" alt="Attog Store" width="160" height="36" style="display:block;width:160px;max-width:160px;height:auto;border:0;outline:none" />`;
+    return `<img src="${escapeHtml(remote)}" alt="" width="96" style="${LOGO_IMG_STYLE}" />`;
   }
   if (readLogoPng()) {
-    return `<img src="cid:${LOGO_CID}" alt="Attog Store" width="160" height="36" style="display:block;width:160px;max-width:160px;height:auto;border:0;outline:none" />`;
+    return `<img src="cid:${LOGO_CID}" alt="" width="96" style="${LOGO_IMG_STYLE}" />`;
   }
-  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;letter-spacing:0.08em;color:${BRAND.logo};line-height:1">ATTOG</div>`;
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:800;letter-spacing:0.08em;color:${BRAND.logo};line-height:1">ATTOG</div>`;
 }
 
 function customerName(order: OrderView) {
@@ -414,14 +417,15 @@ async function sendMail(opts: { to: string; subject: string; html: string }) {
     return { queued: false, mode: "console" as const };
   }
 
-  // Attach logo as ZeptoMail inline image (cid:attog-logo). Gmail blocks data: URIs
-  // but shows CID inlines and remote https images (same as product photos).
-  const logoBuf = readLogoPng();
+  // Only attach a CID logo when the HTML actually references cid:attog-logo.
+  // If EMAIL_LOGO_URL / https is used, skip the attachment so clients do not
+  // show a "download attog-logo.png" chip at the bottom of the email.
+  const usesCidLogo = opts.html.includes(`cid:${LOGO_CID}`);
+  const logoBuf = usesCidLogo ? readLogoPng() : null;
   const inlineImages = logoBuf
     ? [
         {
           cid: LOGO_CID,
-          name: "attog-logo.png",
           mime_type: "image/png",
           content: logoBuf.toString("base64"),
         },
