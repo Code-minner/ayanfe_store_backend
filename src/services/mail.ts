@@ -339,7 +339,7 @@ function buildOrderEmailHtml(opts: {
                 <thead>
                   <tr>
                     <th align="left" style="padding:10px 8px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND.primary};border-bottom:1px solid ${BRAND.softBorder}">Product</th>
-                    <th align="center" style="padding:10px 8px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND.primary};border-bottom:1px solid ${BRAND.softBorder}">Qty</th>
+                    <th align="center" style="padding:10px 8px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND.primary};border-bottom:1px solid ${BRAND.softBorder}">Quantity</th>
                     <th align="right" style="padding:10px 8px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:${BRAND.primary};border-bottom:1px solid ${BRAND.softBorder}">Amount</th>
                   </tr>
                 </thead>

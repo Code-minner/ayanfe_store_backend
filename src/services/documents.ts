@@ -6,7 +6,7 @@ import { shippingLabel, STOCKPILE_DISCLAIMER } from "./shippingFees.js";
 
 const DEFAULT_STORE_NAME = "Ayanfe T.T.O Gracious";
 const DEFAULT_STORE_ADDRESS =
-  "4b Fadipe street, (by Phidel Group of Schools, Seliat branch) 3rd building before Green Field hotel, seliat bus stop, Egbeda, Lagos.";
+  "4b Fadipe (3rd building before Greenlight hotel), Seliat, Egbeda, Lagos.";
 
 function money(n: number) {
   return `₦${n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

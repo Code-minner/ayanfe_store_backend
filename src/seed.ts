@@ -93,7 +93,7 @@ async function seed() {
         paystackEnabled: Boolean(process.env.PAYSTACK_SECRET_KEY),
         storeName: "Ayanfe T.T.O Gracious",
         storeAddress:
-          "4b Fadipe street, (by Phidel Group of Schools, Seliat branch) 3rd building before Green Field hotel, seliat bus stop, Egbeda, Lagos.",
+          "4b Fadipe (3rd building before Greenlight hotel), Seliat, Egbeda, Lagos.",
         adminNotifyEmail: process.env.ADMIN_EMAIL ?? "ayanfewholesaledev@gmail.com",
       },
     });

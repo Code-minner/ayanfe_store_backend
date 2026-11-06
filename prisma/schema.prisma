@@ -140,7 +140,7 @@ model Settings {
   bankTransferEnabled Boolean  @default(true)
   adminNotifyEmail    String   @default("")
   storeName           String   @default("Ayanfe T.T.O Gracious")
-  storeAddress        String   @default("4b Fadipe street, (by Phidel Group of Schools, Seliat branch) 3rd building before Green Field hotel, seliat bus stop, Egbeda, Lagos.")
+  storeAddress        String   @default("4b Fadipe (3rd building before Greenlight hotel), Seliat, Egbeda, Lagos.")
   storePhone          String   @default("")
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

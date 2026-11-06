@@ -18,9 +18,9 @@ export const env = {
   paystackSecretKey: process.env.PAYSTACK_SECRET_KEY ?? "",
   paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY ?? "",
   bank: {
-    bankName: process.env.BANK_NAME ?? "First Bank",
-    accountName: process.env.BANK_ACCOUNT_NAME ?? "ATTOG STORE",
-    accountNumber: process.env.BANK_ACCOUNT_NUMBER ?? "9182747839",
+    bankName: process.env.BANK_NAME ?? "OPay",
+    accountName: process.env.BANK_ACCOUNT_NAME ?? "Olasupo Toyin",
+    accountNumber: process.env.BANK_ACCOUNT_NUMBER ?? "8020705719",
   },
   checkoutFee: Number(process.env.CHECKOUT_FEE ?? 0),
   waybillFee: Number(process.env.WAYBILL_FEE ?? 500),

@@ -4,7 +4,7 @@ import { Prisma } from "../generated/prisma/client.js";
 import { prisma, withId, withIds } from "../db.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { AppError } from "../utils/AppError.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth, requireAdmin, requireStaff } from "../middleware/auth.js";
 import { uploadProductImage } from "../middleware/upload.js";
 import { uploadProductImageBuffer } from "../services/cloudinary.js";
 
@@ -228,7 +228,7 @@ router.get(
 router.post(
   "/",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const body = productSchema.parse(req.body);
     const existing = await prisma.product.findUnique({ where: { slug: body.slug } });
@@ -273,7 +273,7 @@ router.post(
 router.post(
   "/upload-image",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     await new Promise<void>((resolve, reject) => {
       uploadProductImage(req, res, (err) => (err ? reject(err) : resolve()));
@@ -290,7 +290,7 @@ router.post(
 router.put(
   "/:id",
   requireAuth,
-  requireAdmin,
+  requireStaff,
   asyncHandler(async (req, res) => {
     const body = productSchema.partial().parse(req.body);
     try {
